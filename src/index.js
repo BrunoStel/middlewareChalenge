@@ -1,7 +1,9 @@
 const express = require('express');
+
 const cors = require('cors');
 
 const { v4: uuidv4, validate } = require('uuid');
+
 
 const app = express();
 app.use(express.json());
@@ -11,17 +13,18 @@ const users = [];
 
 
 function checksExistsUserAccount(request, response, next) {
-  const username = request.headers
+  const {username} = request.headers
 
   const user = users.find(obj=>obj.username === username)
 
   if(!user){
-    response.status(404).send({error:'User not found!'})
+    return response.status(404).json({error:'User not found!'})
   }
 
-  request.user = user
+   request.user = user
 
-  next()
+
+   return next()
 }
 
 function checksCreateTodosUserAvailability(request, response, next) {
@@ -29,27 +32,58 @@ function checksCreateTodosUserAvailability(request, response, next) {
 
   const totalOfTodos = user.todos.length
 
-  if(totalOfTodos > 10 && user.pro === false){
-    response.status(403).send({error:'You are not able to create more than 10 todos in a free plan, upgrade your account now!'})
+  if(totalOfTodos >= 10 && user.pro === false){
+    return response.status(403).json({error:'You are not able to create more than 10 todos in a free plan, upgrade your account now!'})
   }
 
   request.user = user
-
-  next()
+  
+  return next()
 
 }
 
 function checksTodoExists(request, response, next) {
-  const {user} = request
+  const {username} = request.headers
 
   const {id} = request.params
 
-  user.todos.find(obj=>obj.id === id)
+  if(!validate(id)){
+    return  response.status(400).json({error:'ID is not an UUID!'})
+  }
+  
 
+  const user = users.find(obj=>obj.username === username)
+  
+  if(!user){
+    return  response.status(404).json({error:'User not found!'})
+  }
+
+  const todo = user.todos.find(obj=>obj.id === id)
+
+  if(!todo){
+    return  response.status(404).json({error:'Todo not found!'})
+  }
+
+
+  request.todo = todo
+  request.user = user
+
+  return next()
 }
 
 function findUserById(request, response, next) {
-  // Complete aqui
+  const {id} = request.params
+
+  const user = users.find(obj => obj.id === id)
+
+  if(!user){
+    return  response.status(404).json({error:'User not found!'})
+  }
+
+
+  request.user = user
+
+  return next()
 }
 
 app.post('/users', (request, response) => {
@@ -95,11 +129,13 @@ app.patch('/users/:id/pro', findUserById, (request, response) => {
 app.get('/todos', checksExistsUserAccount, (request, response) => {
   const { user } = request;
 
+ 
   return response.json(user.todos);
 });
 
 app.post('/todos', checksExistsUserAccount, checksCreateTodosUserAvailability, (request, response) => {
   const { title, deadline } = request.body;
+
   const { user } = request;
 
   const newTodo = {
